@@ -19,7 +19,6 @@ void *work(void *t);
 int i=0;
 char name[1028];
 char whole[10028];
-char file[100]; // file buffer size 
 
 pthread_mutex_t lock=PTHREAD_MUTEX_INITIALIZER;// mutex lock for i
 
@@ -35,7 +34,8 @@ struct Node{
 struct Node *h=NULL;
 
 void add(struct Node *head,int data);
-void delete(struct Node *head,int entry);
+struct Node *delete(struct Node *head,int entry);
+void printList(struct Node *head);
 
 int main(int argc, char *argv[]){
 
@@ -79,23 +79,27 @@ int main(int argc, char *argv[]){
 			if(i<NUM_THREADS){
 			
 				puts("Someone Joined!");
-
+			
 				add(h,new_fd);// add client to table here
-
-				pthread_create(&thread,NULL,work,(void *)ptr);
 				
+				pthread_create(&thread,NULL,work,(void *)ptr);
+
+				fflush(stdout);
+			
+	
 			}
 			else{
 
 				write(new_fd,"Room full\n",strlen("Room full \n"+1 ));
 
 				close(new_fd);
+				goto l;
 
 			}
 			pthread_mutex_lock(&lock);
 			i++;
 			pthread_mutex_unlock(&lock);
-
+			l: ;
 	}
 
 	puts("Why am i here?");	
@@ -137,38 +141,45 @@ void add(struct Node *head,int data){
 
 }
 
-void delete(struct Node *head,int entry){
+struct Node *delete(struct Node *head,int entry){
 
 	struct Node *cur;
 	struct Node *b4;
 	int count=0;
 	int j;
+	
+	if(head==NULL){
+		return NULL;
+	}
+
+	if((*head).item==entry){
+
+		cur=(*head).next;
+		free(head);
+		return cur;
+	}
+
+	(*head).next=delete((*head).next,entry);
+
+	return head;
+
+}
+
+void printList(struct Node *head){
+
+	struct Node *cur;
 
 	cur=head;
 
-	while(cur!=NULL){//traversing through list
+	while(cur!=NULL){
 
-		if((*cur).item==entry){
+		printf("%i ",(*cur).item);
 
-			if(count==0){
-
-				head=(*cur).next;
-			
-
-			}
-
-			for(j=0;j<count;j++){
-				b4=cur;
-				cur=(*cur).next;
-			}
-
-			(*b4).next=(*cur).next;
-			
-		}
-	
 		cur=(*cur).next;
-		count++;
-	}	
+
+	}
+
+	printf("\n");
 
 }
 
@@ -183,7 +194,7 @@ void *work(void *t){// each thread runs this
 	char client[1028];
 	char con[1028];
 
-	struct Node n;
+	struct Node *n=NULL;
 	n=h;
 
 	sprintf(hold,"Welcome to %s's ChatRoom \n",name);
@@ -194,20 +205,30 @@ void *work(void *t){// each thread runs this
 
 	read(socket,client,sizeof(client)+1); // read from client
 
-	sprintf(con,"%ss");
+	pthread_mutex_lock(&tlock);
+
+	sprintf(con,"%s has joined the room\n",client);
 
 	while(n!=NULL){
 
-		write((*h).item,"",sizeof(con));
+		if((*n).item==socket){
+
+			goto here;
+
+		}
+
+		write((*n).item,con,strlen(con));
+
+		here:
 
 		n=(*n).next;
+
 	}
+	pthread_mutex_unlock(&tlock);
 
 	while((readi=read(socket,bufferin,sizeof(bufferin)+1)) > 0 ){
-		
-		sprintf(whole,"\n%s:	%s\n",client,bufferin);// print a message
 
-		//printf("\n");
+		sprintf(whole,"\n%s:	%s\n",client,bufferin);// print a message
 
 		for(s=0;s<strlen(bufferin);s++){
 
@@ -246,10 +267,32 @@ void *work(void *t){// each thread runs this
 	i--;
 	pthread_mutex_unlock(&lock);
 
-	delete(h,socket);// remove client from table here
+	h=delete(h,socket);// remove client from table here
+
+	struct Node *r=NULL;
+	r=h;
+
+	sprintf(hold,"%s has left the room\n",client);
+
+	pthread_mutex_lock(&tlock);
+	while(r!=NULL){
+
+		if((*r).item==socket){
+
+			goto g;
+
+		}
+
+		write((*r).item,hold,strlen(hold));
+
+		g:
+
+		r=(*r).next;
+
+	}
+
+	pthread_mutex_unlock(&tlock);
 
 	close(socket);
-
-	pthread_exit(NULL);
 
 }
